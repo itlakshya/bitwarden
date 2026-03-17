@@ -896,9 +896,6 @@ function AddGroupModal({
   const [fieldDefinitions, setFieldDefinitions] = useState<GroupFieldDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
 
   const fieldTypes: { value: GroupFieldType; label: string }[] = [
     { value: 'TEXT', label: 'Text' },
@@ -908,14 +905,6 @@ function AddGroupModal({
     { value: 'NUMBER', label: 'Number' },
     { value: 'TEXTAREA', label: 'Long text' },
   ];
-
-  const validatePassword = (pass: string) => {
-    if (pass.length > 0 && pass.length < 8) {
-      setPasswordError('Confirmation password must be at least 8 characters.');
-    } else {
-      setPasswordError('');
-    }
-  };
 
   const addField = () => {
     setFieldDefinitions((prev) => [
@@ -949,10 +938,6 @@ function AddGroupModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPassword.length < 8) {
-      setError('Administrator confirmation password is required.');
-      return;
-    }
     if (fieldDefinitions.length === 0) {
       setError('Please add at least one field to the group.');
       return;
@@ -1052,64 +1037,6 @@ function AddGroupModal({
               </div>
             </div>
 
-            {/* Admin Confirmation Section */}
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                <div className="p-2 bg-amber-50 text-amber-600 rounded-lg ring-4 ring-amber-50/50">
-                  <KeyIcon className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-800 tracking-tight text-sm">Security Verification</h4>
-                  <div className="h-0.5 w-8 bg-amber-500 mt-1 rounded-full"></div>
-                </div>
-              </div>
-              
-              <div className="space-y-5">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                    To maintain organizational security, please enter your administrator password to confirm the creation of this secure group.
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2 ml-1">
-                    Confirm Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative group/input">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/input:text-amber-500 transition-colors">
-                      <KeyIcon className="h-5 w-5" />
-                    </div>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      required
-                      value={adminPassword}
-                      onChange={(e) => {
-                        setAdminPassword(e.target.value);
-                        validatePassword(e.target.value);
-                      }}
-                      className={`w-full pl-12 pr-12 py-3.5 border rounded-xl focus:ring-4 focus:ring-amber-50 focus:border-amber-500 transition-all text-sm font-medium text-slate-900 placeholder:text-slate-400 bg-slate-50/30 ${
-                        passwordError ? 'border-red-300' : 'border-slate-200'
-                      }`}
-                      placeholder="Enter admin password"
-                    />
-                    {adminPassword && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-amber-600 transition-colors"
-                      >
-                        {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
-                      </button>
-                    )}
-                  </div>
-                  {passwordError && (
-                    <p className="text-[10px] text-red-500 mt-2 leading-relaxed font-semibold animate-in fade-in slide-in-from-left-2 ml-1">
-                       {passwordError}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Fields Definition Section */}
@@ -1244,7 +1171,7 @@ function AddGroupModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !!passwordError}
+              disabled={loading}
               className="px-10 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Group'}
