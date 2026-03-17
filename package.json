@@ -1,0 +1,49 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:no-types": "next build --no-lint",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:reset": "prisma migrate reset --force",
+    "db:seed": "tsx src/scripts/seed-prisma.ts",
+    "seed:super-admin": "tsx src/scripts/seed-super-admin.ts",
+    "db:studio": "prisma studio",
+    "docker:up": "docker-compose -f docker-compose.dev.yml up -d",
+    "docker:down": "docker-compose -f docker-compose.dev.yml down"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.4",
+    "@heroicons/react": "^2.1.1",
+    "@prisma/client": "^5.22.0",
+    "@types/nodemailer": "^6.4.17",
+    "aos": "^2.3.4",
+    "axios": "^1.6.7",
+    "bcrypt": "^6.0.0",
+    "mongoose": "^8.2.0",
+    "next": "^16.1.6",
+    "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.12",
+    "prisma": "^5.22.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-hot-toast": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/aos": "^3.0.7",
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}

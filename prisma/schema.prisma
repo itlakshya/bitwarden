@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with enhanced roles for department system
+model User {
+  id                      String    @id @default(uuid())
+  name                    String
+  email                   String    @unique
+  role                    UserRole  @default(USER)
+  password                String
+  isVerified              Boolean   @default(false)
+  verificationToken       String?    @unique
+  verificationTokenExpiry DateTime?
+  resetToken              String?    @unique
+  resetTokenExpiry        DateTime?
+
+  // Department relationships
+  managedDepartment       Department? @relation("DepartmentAdmin")
+  departmentMemberships   DepartmentUser[]
+
+  // Audit relationships
+  auditLogs               AuditLog[]
+  departmentAccessGrants  DepartmentAccessGrant[]
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  // Indexes (no index on email, verificationToken, resetToken - @unique creates one)
+  @@index([role])
+  @@index([isVerified])
+  @@index([createdAt])
+  @@map("users")
+}
+
+// Department model for organizational structure
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+
+  // Sub-department support
+  parentId    String?
+  parent      Department? @relation("SubDepartments", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Department[] @relation("SubDepartments")
+
+  // Department admin relationship
+  adminId     String   @unique
+  admin       User     @relation("DepartmentAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+
+  groups      Group[]
+  users       DepartmentUser[]
+  accessGrants DepartmentAccessGrant[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Indexes (no index on name, adminId - @unique creates one)
+  @@index([parentId])
+  @@index([createdAt])
+  @@map("departments")
+}
+
+// Junction table for department user memberships (no updatedAt - updates are rare)
+model DepartmentUser {
+  id           String     @id @default(uuid())
+  userId       String
+  departmentId String
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  groupAccess  GroupAccess[]
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, departmentId])
+  @@index([userId])
+  @@index([departmentId])
+  @@index([createdAt])
+  @@map("department_users")
+}
+
+// Explicit grant: user has access to this department (and, if top-level, all its sub-departments)
+model DepartmentAccessGrant {
+  id           String     @id @default(uuid())
+  userId       String
+  departmentId String
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, departmentId])
+  @@index([userId])
+  @@index([departmentId])
+  @@map("department_access_grants")
+}
+
+// Group model for organizing data (AWS, Twilio, etc.)
+model Group {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+
+  departmentId  String
+  department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  fieldDefinitions FieldDefinition[]
+  items         GroupItem[]
+
+  userAccess    GroupAccess[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([name, departmentId])
+  @@index([departmentId])
+  @@index([name])
+  @@index([createdAt])
+  @@map("groups")
+}
+
+// Junction table for group user access
+model GroupAccess {
+  id               String         @id @default(uuid())
+  departmentUserId String
+  groupId          String
+
+  departmentUser   DepartmentUser @relation(fields: [departmentUserId], references: [id], onDelete: Cascade)
+  group            Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime       @default(now())
+
+  @@unique([departmentUserId, groupId])
+  @@index([departmentUserId])
+  @@index([groupId])
+  @@index([createdAt])
+  @@map("group_access")
+}
+
+// Field definition for dynamic group structure
+model FieldDefinition {
+  id          String    @id @default(uuid())
+  name        String
+  type        FieldType
+  required    Boolean   @default(false)
+  encrypted   Boolean   @default(false)
+  order       Int       @default(0)
+  placeholder String?
+
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  values      FieldValue[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([name, groupId])
+  @@index([groupId])
+  @@index([order])
+  @@index([type])
+  @@map("field_definitions")
+}
+
+// Group item: dynamicData (JSONB) is primary for non-encrypted fields; FieldValue only for encrypted fields.
+model GroupItem {
+  id          String       @id @default(uuid())
+  title       String
+
+  groupId     String
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Only for encrypted field values; non-encrypted data lives in dynamicData
+  values      FieldValue[]
+
+  // Primary storage for non-encrypted dynamic fields (single JSONB write, no per-field rows)
+  dynamicData Json?        @db.JsonB
+
+  targetDate  DateTime?
+  status      ItemStatus   @default(ACTIVE)
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([groupId])
+  @@index([status])
+  @@index([targetDate])
+  @@index([createdAt])
+  @@index([title])
+  @@index([dynamicData], type: Gin)
+  @@map("group_items")
+}
+
+// Only for encrypted/sensitive field values; non-encrypted values use GroupItem.dynamicData.
+model FieldValue {
+  id                String          @id @default(uuid())
+  value             String?
+  encryptedValue    String?
+
+  fieldDefinitionId String
+  fieldDefinition   FieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+
+  groupItemId       String
+  groupItem         GroupItem       @relation(fields: [groupItemId], references: [id], onDelete: Cascade)
+
+  // No updatedAt - bridge table, updates are rare
+  createdAt         DateTime        @default(now())
+
+  @@unique([fieldDefinitionId, groupItemId])
+  @@index([fieldDefinitionId])
+  @@index([groupItemId])
+  @@index([createdAt])
+  @@map("field_values")
+}
+
+// Enums
+enum UserRole {
+  SUPER_ADMIN
+  DEPT_ADMIN
+  SUPERVISOR
+  USER
+}
+
+enum FieldType {
+  TEXT
+  PASSWORD
+  URL
+  EMAIL
+  NUMBER
+  TEXTAREA
+}
+
+enum ItemStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PASSWORD_CHANGE
+  ROLE_CHANGE
+  DEPARTMENT_ASSIGN
+  GROUP_ACCESS_GRANT
+  GROUP_ACCESS_REVOKE
+  DEPARTMENT_ACCESS_GRANT
+  DEPARTMENT_ACCESS_REVOKE
+  ITEM_CREATE
+  ITEM_UPDATE
+  ITEM_DELETE
+  EXPORT_DATA
+  IMPORT_DATA
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  action      AuditAction
+  entityType  String
+  entityId    String?
+  entityName  String?
+  userId      String
+  userEmail   String
+  userRole    UserRole
+  details     Json?       @db.JsonB
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Reduced indexes: userId, createdAt, entityType only
+  @@index([userId])
+  @@index([createdAt])
+  @@index([entityType])
+
+  @@map("audit_logs")
+}
