@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
         to: adminEmail,
         subject: 'Welcome - Department Admin Access',
         html: `
-          <h2>Welcome to Lakshya Copycat!</h2>
+          <h2>Welcome to Lakshya DataVault</h2>
           <p>Hello ${adminName},</p>
           <p>You have been assigned as the Department Administrator for <strong>${name}</strong>.</p>
           
@@ -361,7 +361,7 @@ export async function POST(request: NextRequest) {
           </ul>
           
           <p>You can sign in at: <a href="${process.env.BASE_URL}/auth/signin">${process.env.BASE_URL}/auth/signin</a></p>
-          <p>Please change your password after your first login for security.</p>
+         
           
           <br>
           <p>Best regards,<br>Lakshya Team</p>
