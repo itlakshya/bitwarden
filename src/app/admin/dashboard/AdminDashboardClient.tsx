@@ -53,6 +53,7 @@ export default function AdminDashboardClient({
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: ActiveTab = (tabParam as ActiveTab) || 'overview';
+  const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalDepartments: 0,
     totalUsers: 0,
@@ -65,6 +66,7 @@ export default function AdminDashboardClient({
   }, []);
 
   const fetchStats = async () => {
+    setStatsLoading(true);
     try {
       const response = await fetch('/api/admin/stats');
       if (response.ok) {
@@ -74,6 +76,8 @@ export default function AdminDashboardClient({
     } catch (error) {
       console.error('Error fetching stats:', error);
       toast.error('Failed to load dashboard stats');
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -162,7 +166,11 @@ export default function AdminDashboardClient({
                   </div>
                 </div>
                 <div className="relative z-10 mt-4">
-                  <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-blue-950 transition-colors">{stats.totalDepartments}</p>
+                  {statsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-blue-950 transition-colors">{stats.totalDepartments}</p>
+                  )}
                 </div>
               </div>
 
@@ -175,7 +183,11 @@ export default function AdminDashboardClient({
                   </div>
                 </div>
                 <div className="relative z-10 mt-4">
-                  <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-emerald-950 transition-colors">{stats.totalUsers}</p>
+                  {statsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-emerald-950 transition-colors">{stats.totalUsers}</p>
+                  )}
                 </div>
               </div>
 
@@ -188,7 +200,11 @@ export default function AdminDashboardClient({
                   </div>
                 </div>
                 <div className="relative z-10 mt-4">
-                  <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-purple-950 transition-colors">{stats.totalGroups}</p>
+                  {statsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-purple-950 transition-colors">{stats.totalGroups}</p>
+                  )}
                 </div>
               </div>
 
@@ -201,7 +217,11 @@ export default function AdminDashboardClient({
                   </div>
                 </div>
                 <div className="relative z-10 mt-4">
-                  <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-amber-950 transition-colors">{stats.totalItems}</p>
+                  {statsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
+                  ) : (
+                    <p className="text-2xl font-bold text-slate-900 tracking-tight group-hover:text-amber-950 transition-colors">{stats.totalItems}</p>
+                  )}
                 </div>
               </div>
             </div>
