@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'react-hot-toast';
 import { 
@@ -16,6 +16,9 @@ import {
   ArrowLeftOnRectangleIcon,
   PencilIcon,
   TrashIcon,
+  KeyIcon,
+  XMarkIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { signOut } from 'next-auth/react';
 import { APP_NAME_PARTS } from '@/lib/branding';
@@ -77,12 +80,34 @@ export default function NewDashboardClient() {
   const [groupSearch, setGroupSearch] = useState('');
   const [editingItem, setEditingItem] = useState<GroupItem | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [changePasswordForm, setChangePasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState('');
 
   useEffect(() => {
     if (session?.user) {
       fetchUserGroups();
     }
   }, [session]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    if (profileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [profileMenuOpen]);
 
   const fetchUserGroups = async () => {
     try {
@@ -128,6 +153,46 @@ export default function NewDashboardClient() {
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/auth/signin' });
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError('');
+    if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) {
+      setChangePasswordError('New passwords do not match');
+      return;
+    }
+    if (changePasswordForm.newPassword.length < 8) {
+      setChangePasswordError('New password must be at least 8 characters');
+      return;
+    }
+    setChangePasswordLoading(true);
+    try {
+      const res = await fetch('/api/user/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: changePasswordForm.currentPassword,
+          newPassword: changePasswordForm.newPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = (Array.isArray(data.details) && data.details.length) ? data.details.join(' ') : (data.error || 'Failed to change password');
+        setChangePasswordError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success('Password changed successfully');
+      setShowChangePassword(false);
+      setChangePasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to change password';
+      setChangePasswordError(msg);
+      toast.error(msg);
+    } finally {
+      setChangePasswordLoading(false);
+    }
   };
 
   const handleAddItem = async (itemData: any) => {
@@ -340,15 +405,65 @@ export default function NewDashboardClient() {
         });
 
   return (
-    <div className="flex h-screen bg-slate-50">
-      {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-        <div className="p-4 border-b border-slate-100/80">
-          <div className="flex items-center justify-start h-14 overflow-hidden">
-            <img src="/logo.png" alt="Logo" className="h-full w-auto object-contain" />
-          </div>
+    <div className="flex flex-col h-screen bg-slate-50">
+      {/* Top header with profile */}
+      <header className="h-14 shrink-0 flex items-center justify-between px-4 md:px-6 bg-white border-b border-slate-200/80 shadow-sm">
+        <div className="flex items-center h-full overflow-hidden">
+          <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
         </div>
+        {session?.user && (
+          <div className="relative" ref={profileMenuRef}>
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((o) => !o)}
+              className="flex items-center gap-2 p-1.5 rounded-full hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200"
+              aria-expanded={profileMenuOpen}
+              aria-haspopup="true"
+              aria-label="Profile menu"
+            >
+              <span className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 hover:text-slate-600 transition-colors">
+                <UserCircleIcon className="w-8 h-8" />
+              </span>
+            </button>
+            {profileMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white rounded-xl shadow-lg border border-slate-200/80 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{session.user.name}</p>
+                  <p className="text-xs text-slate-500 truncate">{session.user.email}</p>
+                </div>
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowChangePassword(true);
+                      setProfileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  >
+                    <KeyIcon className="h-4 w-4 text-slate-400" />
+                    Change password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      handleSignOut();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                  >
+                    <ArrowLeftOnRectangleIcon className="h-4 w-4 text-slate-400" />
+                    Log out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </header>
 
+      <div className="flex flex-1 overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0">
         {/* Groups List */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="mb-6">
@@ -446,31 +561,94 @@ export default function NewDashboardClient() {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Footer Profile & Sign Out */}
-        <div className="mt-auto border-t border-slate-100 bg-white">
-          {session?.user && (
-            <div className="p-6">
-              <div className="mb-4">
-                <p className="text-[14px] font-bold text-blue-900 truncate tracking-tight">
-                  {session.user.name}
-                </p>
-                <p className="text-[10px] font-semibold text-blue-400 truncate uppercase mt-0.5 tracking-wider">
-                  {session.user.email}
-                </p>
-              </div>
-              
+      {/* Change password modal */}
+      {showChangePassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200/50">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <KeyIcon className="h-5 w-5 text-blue-600" />
+                Change password
+              </h3>
               <button
-                onClick={handleSignOut}
-                className="group/logout w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-blue-50 text-slate-500 hover:bg-blue-100/40 hover:border-blue-200 hover:text-blue-600 rounded-xl transition-all duration-300 active:scale-[0.98] text-[10px] font-black uppercase tracking-[0.2em]"
+                type="button"
+                onClick={() => {
+                  setShowChangePassword(false);
+                  setChangePasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                  setChangePasswordError('');
+                }}
+                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
               >
-                Sign out
-                <ArrowLeftOnRectangleIcon className="h-4 w-4 group-hover/logout:-translate-x-1 transition-transform" />
+                <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-          )}
+            <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+              {changePasswordError && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{changePasswordError}</p>
+              )}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Current password</label>
+                <input
+                  type="password"
+                  value={changePasswordForm.currentPassword}
+                  onChange={(e) => setChangePasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 text-sm"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">New password</label>
+                <input
+                  type="password"
+                  value={changePasswordForm.newPassword}
+                  onChange={(e) => setChangePasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 text-sm"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+                <p className="text-xs text-slate-500 mt-1">At least 8 characters</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Confirm new password</label>
+                <input
+                  type="password"
+                  value={changePasswordForm.confirmPassword}
+                  onChange={(e) => setChangePasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 text-sm"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChangePassword(false);
+                    setChangePasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                    setChangePasswordError('');
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changePasswordLoading}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {changePasswordLoading ? 'Updating...' : 'Update password'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -640,6 +818,7 @@ export default function NewDashboardClient() {
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* Add Item Modal */}

@@ -369,17 +369,17 @@ function CreateDepartmentModal({ onClose, onSuccess, departments, parentDepartme
       toast.success(editingDepartment ? 'Department updated successfully' : 'Department created successfully');
       onSuccess();
     } catch (error: any) {
-      setError(error.message);
-      toast.error(error.message);
+      const msg = error.message || 'Something went wrong';
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 lg:left-64 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+    <div className="fixed inset-0 lg:left-64 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300 overflow-y-auto">
+      <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] max-w-4xl w-full max-h-[90vh] min-h-0 flex flex-col my-auto">
+        <div className="p-8 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <h3 className="text-xl font-bold text-slate-900 tracking-tight">
             {editingDepartment 
               ? 'Edit Department' 
@@ -398,13 +398,8 @@ function CreateDepartmentModal({ onClose, onSuccess, departments, parentDepartme
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm animate-in fade-in slide-in-from-top-2">
-              {error}
-            </div>
-          )}
-
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto p-8 space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             {/* Department Details Section */}
             <div className="space-y-6">
@@ -552,8 +547,9 @@ function CreateDepartmentModal({ onClose, onSuccess, departments, parentDepartme
               </div>
             </div>
           </div>
+          </div>
 
-          <div className="flex justify-end gap-3 p-8 bg-slate-50/50 border-t border-slate-100">
+          <div className="shrink-0 flex justify-end gap-3 p-8 bg-slate-50/50 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}

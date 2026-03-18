@@ -254,18 +254,21 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check if department name already exists
-    const existingDepartment = await prisma.department.findFirst({
-      where: { name: { equals: name, mode: 'insensitive' } }
+    // Check if department name already exists under the same parent (siblings only)
+    // Top-level: unique among root departments. Sub-department: unique among same parent's children.
+    const existingSibling = await prisma.department.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        parentId: parentId || null,
+      },
     });
-    
-    if (existingDepartment) {
+    if (existingSibling) {
       return NextResponse.json(
-        { error: 'Department with this name already exists' },
+        { error: parentId ? 'A sub-department with this name already exists under this department.' : 'A department with this name already exists.' },
         { status: 409 }
       );
     }
-    
+
     // Check if admin email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: adminEmail }
@@ -348,6 +351,7 @@ export async function POST(request: NextRequest) {
           <p><strong>Your Login Details:</strong></p>
           <ul>
             <li>Email: ${adminEmail}</li>
+            <li>Password: ${adminPassword}</li>
             <li>Role: Department Admin</li>
             <li>Department: ${name}</li>
           </ul>
@@ -361,7 +365,7 @@ export async function POST(request: NextRequest) {
           </ul>
           
           <p>You can sign in at: <a href="${process.env.BASE_URL}/auth/signin">${process.env.BASE_URL}/auth/signin</a></p>
-         
+          <p>Please change your password after your first login for security.</p>
           
           <br>
           <p>Best regards,<br>Lakshya Team</p>
@@ -393,9 +397,14 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('Error creating department:', error);
+    const code = error?.code;
+    const isUniqueViolation = code === 'P2002' || (error?.message && String(error.message).includes('Unique constraint failed'));
+    const friendlyMessage = isUniqueViolation
+      ? 'A department or sub-department with this name already exists. Please choose a different name.'
+      : (error?.message && !String(error.message).includes('invocation') ? error.message : 'Unable to create department. Please try again.');
     return NextResponse.json(
-      { error: error.message || 'Failed to create department' },
-      { status: error.message?.includes('required') ? 403 : 500 }
+      { error: friendlyMessage },
+      { status: isUniqueViolation ? 409 : (error?.message?.includes('required') ? 403 : 500) }
     );
   }
 }
