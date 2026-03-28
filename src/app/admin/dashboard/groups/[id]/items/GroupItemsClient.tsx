@@ -10,7 +10,8 @@ import {
   ArrowLeftIcon,
   EyeIcon,
   EyeSlashIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import GroupAccessModal from '@/components/GroupAccessModal';
 
@@ -66,7 +67,7 @@ export default function GroupItemsClient({ group, isSuperAdmin }: GroupItemsClie
   const [fieldValues, setFieldValues] = useState<any>({});
   const [createLoading, setCreateLoading] = useState(false);
   const [error, setError] = useState('');
-  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, number>>({});
   const [showAccessModal, setShowAccessModal] = useState(false);
   const [editingItem, setEditingItem] = useState<GroupItem | null>(null);
   const [editFieldValues, setEditFieldValues] = useState<Record<string, string>>({});
@@ -218,9 +219,10 @@ export default function GroupItemsClient({ group, isSuperAdmin }: GroupItemsClie
   };
 
   const renderFieldValue = (item: GroupItem, field: FieldDefinition) => {
-    const value = getFieldValue(item, field.id);
+    const fieldVal = item.values.find(v => v.fieldDefinition.id === field.id) || { value: '', encryptedValue: '' };
+    const value = fieldVal.value || '';
     const key = `${item.id}-${field.id}`;
-    const isPasswordVisible = visiblePasswords.has(key);
+    // const isPasswordVisible = visiblePasswords.has(key);
 
     const copyToClipboard = (text: string) => {
       navigator.clipboard.writeText(text);
@@ -228,13 +230,23 @@ export default function GroupItemsClient({ group, isSuperAdmin }: GroupItemsClie
     };
 
     const toggleReveal = () => {
-      const newVisible = new Set(visiblePasswords);
-      if (newVisible.has(key)) {
-        newVisible.delete(key);
-      } else {
-        newVisible.add(key);
-      }
-      setVisiblePasswords(newVisible);
+      setVisiblePasswords(prev => {
+        const currentState = prev[key] ?? 0;
+        let nextState;
+        
+        if (field.type === 'PASSWORD') {
+          // Password: 0 (dots) -> 1 (Encrypted) -> 2 (Decrypted) -> 0 (dots)
+          nextState = (currentState + 1) % 3;
+        } else {
+          // Other Encrypted: 1 (Encrypted) -> 2 (Decrypted) -> 1 (Encrypted)
+          nextState = currentState === 1 ? 2 : 1;
+        }
+        
+        return {
+          ...prev,
+          [key]: nextState
+        };
+      });
     };
 
     const truncateContent = (text: string) => {
@@ -243,15 +255,34 @@ export default function GroupItemsClient({ group, isSuperAdmin }: GroupItemsClie
     };
 
     const renderCoreValue = () => {
-      if (!value) return <span className="text-slate-400">-</span>;
+      const key = `${item.id}-${field.id}`;
+      // For non-password encrypted fields, default to state 1 (Encrypted)
+      const currentState = visiblePasswords[key] ?? (field.type === 'PASSWORD' ? 0 : 1);
+      
+      const displayEncrypted = (fieldVal as any).encryptedValue || 'Encrypted';
 
-      if (field.type === 'PASSWORD' || field.encrypted) {
+      if (!value && currentState === 2) return <span className="text-slate-400">-</span>;
+
+      if (field.type === 'PASSWORD') {
         return (
           <span 
             className="font-mono text-sm tracking-[0.25em] bg-slate-50 px-2 py-0.5 rounded border border-slate-100 inline-block text-slate-700 min-w-[80px]"
-            title={isPasswordVisible ? value : undefined}
+            title={currentState === 2 ? value : currentState === 1 ? displayEncrypted : undefined}
           >
-            {isPasswordVisible ? truncateContent(value) : '•'.repeat(Math.min(value.length, 8))}
+            {currentState === 0 ? '•'.repeat(Math.min(value.length, 8)) : 
+             currentState === 1 ? <span className="text-[10px] font-bold uppercase italic tracking-wider opacity-60 leading-tight">{truncateContent(displayEncrypted)}</span> : 
+             truncateContent(value)}
+          </span>
+        );
+      }
+
+      if (field.encrypted) {
+        return (
+          <span 
+            className={`font-mono ${currentState === 2 ? 'text-sm' : 'text-[10px] font-bold uppercase italic tracking-wider opacity-60'} bg-slate-50 px-2 py-0.5 rounded border border-slate-100 inline-block text-slate-700 min-w-[80px]`}
+            title={currentState === 2 ? value : displayEncrypted}
+          >
+            {currentState === 2 ? truncateContent(value) : truncateContent(displayEncrypted)}
           </span>
         );
       }
@@ -290,7 +321,7 @@ export default function GroupItemsClient({ group, isSuperAdmin }: GroupItemsClie
     };
 
     return (
-      <div className="group/field relative flex items-center gap-2 w-fit">
+      <div className="group/field relative flex items-center gap-2 w-fit min-w-max whitespace-nowrap">
         {renderCoreValue()}
         {value && (
           <div className="flex items-center gap-1 opacity-0 group-hover/field:opacity-100 transition-opacity">
@@ -298,18 +329,47 @@ export default function GroupItemsClient({ group, isSuperAdmin }: GroupItemsClie
               <button
                 onClick={toggleReveal}
                 className="p-1 text-blue-400 hover:text-blue-600 hover:bg-white rounded transition-all shadow-sm border border-transparent hover:border-blue-100"
-                title={isPasswordVisible ? 'Hide' : 'Show'}
+                title={(() => {
+                  const key = `${item.id}-${field.id}`;
+                  const currentState = visiblePasswords[key] ?? (field.type === 'PASSWORD' ? 0 : 1);
+                  if (field.type === 'PASSWORD') {
+                    if (currentState === 0) return 'Show encrypted status';
+                    if (currentState === 1) return 'Decrypt';
+                    return 'Hide';
+                  }
+                  return currentState === 1 ? 'Decrypt' : 'Hide';
+                })()}
               >
-                {isPasswordVisible ? <EyeSlashIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
+                {(() => {
+                  const key = `${item.id}-${field.id}`;
+                  const currentState = visiblePasswords[key] ?? (field.type === 'PASSWORD' ? 0 : 1);
+                  
+                  if (field.type === 'PASSWORD') {
+                    if (currentState === 0) return <EyeIcon className="h-3.5 w-3.5" />;
+                    if (currentState === 1) return <LockClosedIcon className="h-3.5 w-3.5" />;
+                    return <EyeSlashIcon className="h-3.5 w-3.5" />;
+                  }
+                  
+                  return currentState === 1 ? <LockClosedIcon className="h-4 w-4" /> : <EyeSlashIcon className="h-3.5 w-3.5" />;
+                })()}
               </button>
             )}
-            <button
-              onClick={() => copyToClipboard(value)}
-              className="p-1 text-blue-400 hover:text-blue-600 hover:bg-white rounded transition-all shadow-sm border border-transparent hover:border-blue-100"
-              title="Copy"
-            >
-              <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-            </button>
+            {(() => {
+              const isEncryptedField = field.encrypted || field.type === 'PASSWORD';
+              const key = `${item.id}-${field.id}`;
+              const currentState = visiblePasswords[key] ?? (field.type === 'PASSWORD' ? 0 : 1);
+              if (isEncryptedField && currentState !== 2) return null;
+              
+              return (
+                <button
+                  onClick={() => copyToClipboard(value)}
+                  className="p-1 text-blue-400 hover:text-blue-600 hover:bg-white rounded transition-all shadow-sm border border-transparent hover:border-blue-100"
+                  title="Copy"
+                >
+                  <DocumentDuplicateIcon className="h-3.5 w-3.5" />
+                </button>
+              );
+            })()}
           </div>
         )}
       </div>

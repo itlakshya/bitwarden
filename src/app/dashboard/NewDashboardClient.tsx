@@ -19,6 +19,8 @@ import {
   KeyIcon,
   XMarkIcon,
   UserCircleIcon,
+  LockClosedIcon,
+  LockOpenIcon,
 } from '@heroicons/react/24/outline';
 import { signOut } from 'next-auth/react';
 import { APP_NAME_PARTS } from '@/lib/branding';
@@ -79,7 +81,7 @@ export default function NewDashboardClient() {
   const [addItemLoading, setAddItemLoading] = useState(false);
   const [groupSearch, setGroupSearch] = useState('');
   const [editingItem, setEditingItem] = useState<GroupItem | null>(null);
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, number>>({});
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -310,10 +312,25 @@ export default function NewDashboardClient() {
     };
 
     const toggleReveal = () => {
-      setRevealedPasswords(prev => ({
-        ...prev,
-        [`${itemId}-${fieldDefinition.id}`]: !isRevealed
-      }));
+      const key = `${itemId}-${fieldDefinition.id}`;
+      setRevealedPasswords(prev => {
+        const currentState = prev[key] ?? 0;
+        let nextState;
+        
+        if (fieldDefinition.type === 'PASSWORD') {
+          // Password: 0 (dots) -> 1 (Encrypted) -> 2 (Decrypted) -> 0 (dots)
+          nextState = (currentState + 1) % 3;
+        } else {
+          // Other Encrypted: 1 (Encrypted) -> 2 (Decrypted) -> 1 (Encrypted)
+          // Default to 1 if it's currently 0 or anything else
+          nextState = currentState === 1 ? 2 : 1;
+        }
+        
+        return {
+          ...prev,
+          [key]: nextState
+        };
+      });
     };
 
     const truncateContent = (text: string) => {
@@ -322,6 +339,12 @@ export default function NewDashboardClient() {
     };
 
     const renderCoreValue = () => {
+      const key = `${itemId}-${fieldDefinition.id}`;
+      // For non-password encrypted fields, default to state 1 (Encrypted)
+      const currentState = revealedPasswords[key] ?? (fieldDefinition.type === 'PASSWORD' ? 0 : 1);
+      
+      const displayEncrypted = (value as any).encryptedValue || 'Encrypted';
+      
       if (fieldDefinition.type === 'URL') {
         return (
           <a 
@@ -336,10 +359,20 @@ export default function NewDashboardClient() {
         );
       }
       
-      if (fieldDefinition.encrypted || fieldDefinition.type === 'PASSWORD') {
+      if (fieldDefinition.type === 'PASSWORD') {
         return (
-          <span className="font-mono text-base tracking-[0.25em] bg-slate-100/80 px-3 py-1 rounded-lg border border-slate-200/60 inline-block text-slate-700 min-w-[120px]" title={isRevealed ? value.value : undefined}>
-            {isRevealed ? truncateContent(value.value) : '•'.repeat(Math.min(value.value.length, 12))}
+          <span className="font-mono text-base tracking-[0.25em] bg-slate-100/80 px-3 py-1 rounded-lg border border-slate-200/60 inline-block text-slate-700 min-w-[120px]" title={currentState === 2 ? value.value : currentState === 1 ? displayEncrypted : undefined}>
+            {currentState === 0 ? '•'.repeat(Math.min(value.value.length, 12)) : 
+             currentState === 1 ? <span className="text-[10px] font-bold uppercase italic tracking-wider opacity-60 leading-tight">{truncateContent(displayEncrypted)}</span> : 
+             truncateContent(value.value)}
+          </span>
+        );
+      }
+
+      if (fieldDefinition.encrypted) {
+        return (
+          <span className={`font-mono ${currentState === 2 ? 'text-sm' : 'text-[10px] font-bold uppercase italic tracking-wider opacity-60'} bg-slate-100/80 px-3 py-1 rounded-lg border border-slate-200/60 inline-block text-slate-700 min-w-[120px]`} title={currentState === 2 ? value.value : displayEncrypted}>
+            {currentState === 2 ? truncateContent(value.value) : truncateContent(displayEncrypted)}
           </span>
         );
       }
@@ -352,25 +385,54 @@ export default function NewDashboardClient() {
     };
 
     return (
-      <div className="group/field relative flex items-center gap-3 w-fit">
+      <div className="group/field relative flex items-center gap-3 w-fit min-w-max whitespace-nowrap">
         {renderCoreValue()}
         <div className="flex items-center gap-1 opacity-0 group-hover/field:opacity-100 transition-opacity">
           {(fieldDefinition.encrypted || fieldDefinition.type === 'PASSWORD') && (
             <button
               onClick={toggleReveal}
               className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-white rounded-md transition-all shadow-sm border border-transparent hover:border-blue-100"
-              title={isRevealed ? 'Hide' : 'Show'}
+              title={(() => {
+                const key = `${itemId}-${fieldDefinition.id}`;
+                const currentState = revealedPasswords[key] ?? (fieldDefinition.type === 'PASSWORD' ? 0 : 1);
+                if (fieldDefinition.type === 'PASSWORD') {
+                  if (currentState === 0) return 'Show encrypted status';
+                  if (currentState === 1) return 'Decrypt';
+                  return 'Hide';
+                }
+                return currentState === 1 ? 'Decrypt' : 'Hide';
+              })()}
             >
-              {isRevealed ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+              {(() => {
+                const key = `${itemId}-${fieldDefinition.id}`;
+                const currentState = revealedPasswords[key] ?? (fieldDefinition.type === 'PASSWORD' ? 0 : 1);
+                
+                if (fieldDefinition.type === 'PASSWORD') {
+                  if (currentState === 0) return <EyeIcon className="h-4 w-4" />;
+                  if (currentState === 1) return <LockClosedIcon className="h-4 w-4" />;
+                  return <EyeSlashIcon className="h-4 w-4" />;
+                }
+                
+                return currentState === 1 ? <LockClosedIcon className="h-4 w-4" /> : <EyeSlashIcon className="h-4 w-4" />;
+              })()}
             </button>
           )}
-          <button
-            onClick={() => copyToClipboard(value.value)}
-            className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-white rounded-md transition-all shadow-sm border border-transparent hover:border-blue-100"
-            title="Copy"
-          >
-            <DocumentDuplicateIcon className="h-4 w-4" />
-          </button>
+          {(() => {
+            const isEncryptedField = fieldDefinition.encrypted || fieldDefinition.type === 'PASSWORD';
+            const key = `${itemId}-${fieldDefinition.id}`;
+            const currentState = revealedPasswords[key] ?? (fieldDefinition.type === 'PASSWORD' ? 0 : 1);
+            if (isEncryptedField && currentState !== 2) return null;
+            
+            return (
+              <button
+                onClick={() => copyToClipboard(value.value)}
+                className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-white rounded-md transition-all shadow-sm border border-transparent hover:border-blue-100"
+                title="Copy"
+              >
+                <DocumentDuplicateIcon className="h-4 w-4" />
+              </button>
+            );
+          })()}
         </div>
       </div>
     );
